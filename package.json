@@ -1,0 +1,20 @@
+{
+  "name": "postgre-crud",
+  "version": "1.0.0",
+  "description": "Sistema Cobranza",
+  "main": "server.js",
+  "scripts": {
+    "start": "supervisor server.js"
+  },
+  "author": "Charlie",
+  "license": "MIT",
+  "dependencies": {
+    "body-parser": "^1.18.2",
+    "express": "^4.16.2",
+    "express-method-override": "0.0.3",
+    "pg-promise": "^7.4.1"
+  },
+  "devDependencies": {
+    "supervisor": "^0.12.0"
+  }
+}
