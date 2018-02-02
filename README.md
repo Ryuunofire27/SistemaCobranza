@@ -21,7 +21,7 @@ Usuario
 
 
 	DELETE:
-  /usuario/id                       Elimina el usuario con ese id
+		/usuario/id                       Elimina el usuario con ese id
 	
 Producto
 
@@ -84,8 +84,7 @@ Area
 
 Deudor
 
-	GET	
-
+	GET
 		/deudor/
 		/deudor/id
 		/deudor/id/deudas/
