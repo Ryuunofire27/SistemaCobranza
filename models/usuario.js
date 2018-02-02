@@ -30,19 +30,15 @@ class Usuario{
   }
 
   insert(req,res,next){
-    const usuario = {
-      nombre: req.body.nombre,
-      ape_pat: req.body.ape_pat,
-      ape_mat: req.body.ape_mat,
-      dni: req.body.dni,
-      pssw: req.body.pssw,
-      telefono: req.body.telefono,
-      dir: req.body.dir
-    };
-    conn.none('INSERT INTO "USUARIO"\n' +
-      '("NOMBRE","APELLIDO_PATERNO", "APELLIDO_MATERNO", "DNI", "PASSWORD", "TELEFONO", "DIRECCION")\n' +
-      'VALUES (${nombre},${ape_pat},${ape_mat}, ${dni}, md5(${pssw}||\'cobranza\'||\'cha\'), ${telefono}, ${dir})',
-      usuario)
+    const nombre= req.body.nombre,
+      ape_pat= req.body.ape_pat,
+      ape_mat= req.body.ape_mat,
+      dni= req.body.dni,
+      pssw= req.body.pssw,
+      telefono= req.body.telefono,
+      dir= req.body.dir,
+      id_perfil = req.body.id_perfil;
+    conn.func('insert_usuario',[nombre,ape_pat,ape_mat,dni,pssw,telefono,dir,id_perfil])
       .then(() => {
         res.redirect('/usuario/');
       })

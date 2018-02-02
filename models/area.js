@@ -2,10 +2,10 @@
 
 const conn = require('../database/db');
 
-class Deuda{
+class Area{
 
   getAll(req,res,next){
-    conn.any('SELECT * FROM "DEUDA"')
+    conn.any('SELECT * FROM "AREA"')
       .then((data) => {
         res.send(data);
       })
@@ -17,8 +17,11 @@ class Deuda{
 
   getOne(req,res,next){
     const id = req.params.id;
-    conn.one('SELECT * FROM "DEUDA" WHERE "ID_DEUDA" = $1',id)
+    conn.one('SELECT * FROM "AREA" WHERE "ID_AREA" = $1',id)
       .then((data) => {
+        if(data.rowCount===0){
+          throw new Error('No existe un area con ese id');
+        }
         res.send(data);
       })
       .catch(err => {
@@ -28,11 +31,9 @@ class Deuda{
   }
 
   insert(req,res,next){
-    const monto= req.body.monto,
-      id_deudor = req.body.id_deudor,
-      id_producto = req.body.id_producto;
+    const nombre= req.body.nombre;
 
-    conn.func('insert_deuda', [monto, id_deudor,id_producto])
+    conn.none('INSERT INTO "AREA"("NOMBRE") VALUES ( $1 )',nombre)
       .then(() => {
         res.send({msg: 'insertado con exito'});
       })
@@ -43,13 +44,13 @@ class Deuda{
   }
 
   update(req,res,next){
-    const deuda = {
+    const area = {
       id: req.params.id,
-      estado: req.body.estado
+      nombre: req.body.nombre
     };
-    conn.none('UPDATE "DEUDA"\n' +
-      'SET "ESTADO"=${estado} WHERE "ID_DEUDA"=${id}',
-      deuda)
+    conn.none('UPDATE "AREA"\n' +
+      'SET "NOMBRE"=${nombre} WHERE "ID_AREA"=${id}',
+      area)
       .then(() => {
         res.send({msg: 'modificado con exito'})
       })
@@ -60,14 +61,11 @@ class Deuda{
   }
 
   delete(req,res,next){
-    const id_deudor = req.body.id_deudor,
-      id_producto = req.body.id_producto,
-      id_deuda = req.body.id_deuda;
-
-    conn.func('delete_deuda', [id_deudor,id_producto,id_deuda])
+    const id = req.params.id;
+    conn.result('DELETE FROM "AREA" WHERE "ID_AREA" = $1',id)
       .then((data)=>{
-        if(data[0].delete_deuda === 0 ){
-          throw new Error("No existe deuda con ese id");
+        if(data.rowCount === 0 ){
+          throw new Error("No existe area con ese id");
         }
         res.send({msg:"Eliminado correctamente"});
       })
@@ -79,4 +77,4 @@ class Deuda{
 
 }
 
-module.exports = Deuda;
+module.exports = Area;

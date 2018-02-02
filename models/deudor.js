@@ -27,34 +27,13 @@ class Deudor{
       });
   }
 
-  insert(req,res,next){
-    const deudor = {
-      id_usu: req.body.id_usu,
-      estado: req.body.estado
-    };
-    conn.none('INSERT INTO "DEUDOR"\n' +
-      '("ID_USUARIO","ESTADO")\n' +
-      'VALUES (${id_usu},${estado})',
-      deudor)
-      .then(() => {
-        res.send({msg: 'insertado con exito'});
-      })
-      .catch(err => {
-        res.status(500);
-        res.send({error: err.message});
-      });
-  }
+  getProductos(req, res, next){
+    const id = req.params.id;
 
-  update(req,res,next){
-    const deudor = {
-      id: req.params.id,
-      estado: req.body.estado
-    };
-    conn.none('UPDATE "DEUDOR"\n' +
-      'SET "ESTADO"=${estado} WHERE "ID_DEUDOR"=${id}',
-      deudor)
-      .then(() => {
-        res.send({msg: 'modificado con exito'})
+    conn.any('SELECT pro.* FROM "PRODUCTO" pro INNER JOIN "DEUDOR_PRODUCTO_DEUDA" dpd ON dpd."ID_DEUDOR"=$1 AND dpd."ID_PRODUCTO"=pro."ID_PRODUCTO"',
+      id)
+      .then((data) => {
+        res.send(data);
       })
       .catch(err => {
         res.status(500);
@@ -62,18 +41,111 @@ class Deudor{
       });
   }
 
-  delete(req,res,next){
-    const id = req.params.id;
-    conn.result('DELETE FROM "DEUDOR" WHERE "ID_DEUDOR" = $1',id)
-      .then((data)=>{
-        if(data.rowCount === 0 ){
-          throw new Error("No existe deudor con ese id");
-        }
-        res.send({msg:"Eliminado correctamente"});
+  getProductosById(req, res, next){
+    const id_deudor = req.params.id_deudor,
+      id_producto = req.params.id_producto;
+
+    conn.any('SELECT pro.* FROM "PRODUCTO" pro INNER JOIN "DEUDOR_PRODUCTO_DEUDA" dpd ' +
+      'ON dpd."ID_DEUDOR"=$1 AND dpd."ID_PRODUCTO"=pro."ID_PRODUCTO" WHERE pro."ID_PRODUCTO"=$2',
+      [id_deudor,id_producto])
+      .then((data) => {
+        res.send(data);
       })
-      .catch(err=>{
+      .catch(err => {
         res.status(500);
-        res.send({error: err.message})
+        console.log(err);
+      });
+  }
+
+  getDeudas(req, res, next){
+    const id = req.params.id;
+
+    conn.any('SELECT deuda.* FROM "DEUDA" deuda INNER JOIN "DEUDOR_PRODUCTO_DEUDA" dpd ON dpd."ID_DEUDOR"=$1 AND dpd."ID_DEUDA"=deuda."ID_DEUDA"',
+      id)
+      .then((data) => {
+        res.send(data);
+      })
+      .catch(err => {
+        res.status(500);
+        console.log(err);
+      });
+  }
+
+  getDeudasById(req, res, next){
+    const id_deudor = req.params.id_deudor,
+      id_deuda = req.params.id_deuda;
+
+    conn.any('SELECT deuda.* FROM "DEUDA" deuda INNER JOIN "DEUDOR_PRODUCTO_DEUDA" dpd ' +
+      'ON dpd."ID_DEUDOR"=$1 AND dpd."ID_DEUDA"=deuda."ID_DEUDA" WHERE deuda."ID_DEUDA"=$2',
+      [id_deudor,id_deuda])
+      .then((data) => {
+        res.send(data);
+      })
+      .catch(err => {
+        res.status(500);
+        console.log(err);
+      });
+  }
+
+  getPagos(req, res, next){
+    const id = req.params.id;
+
+    conn.any('SELECT pago.* FROM "PAGO" pago INNER JOIN "DEUDOR_PRODUCTO_DEUDA" dpd ON dpd."ID_DEUDOR"=$1 AND dpd."ID_DEUDA"=pago."ID_DEUDA"',
+      id)
+      .then((data) => {
+        res.send(data);
+      })
+      .catch(err => {
+        res.status(500);
+        console.log(err);
+      });
+  }
+
+  getPagosById(req, res, next){
+    const id_deudor = req.params.id_deudor,
+      id_pago = req.params.id_pago;
+
+    conn.any('SELECT pago.* FROM "PAGO" pago INNER JOIN "DEUDOR_PRODUCTO_DEUDA" dpd ' +
+      'ON dpd."ID_DEUDOR"=$1 AND dpd."ID_DEUDA"=pago."ID_DEUDA" WHERE pago."ID_PAGO"=$2',
+      [id_deudor,id_pago])
+      .then((data) => {
+        res.send(data);
+      })
+      .catch(err => {
+        res.status(500);
+        console.log(err);
+      });
+  }
+
+  getPagosByDeuda(req, res, next){
+    const id_deudor = req.params.id_deudor,
+      id_deuda = req.params.id_deuda;
+
+    conn.any('SELECT pago.* FROM "PAGO" pago INNER JOIN "DEUDOR_PRODUCTO_DEUDA" dpd ' +
+      'ON dpd."ID_DEUDOR"=$1 AND dpd."ID_DEUDA"=pago."ID_DEUDA" WHERE pago."ID_DEUDA"=$2',
+      [id_deudor,id_deuda])
+      .then((data) => {
+        res.send(data);
+      })
+      .catch(err => {
+        res.status(500);
+        console.log(err);
+      });
+  }
+
+  getPagosByProducto(req, res, next){
+    const id_deudor = req.params.id_deudor,
+      id_producto = req.params.id_producto;
+
+    conn.any('SELECT pago.* FROM "PAGO" pago INNER JOIN "DEUDOR_PRODUCTO_DEUDA" dpd ' +
+      'ON dpd."ID_DEUDOR"=$1 AND dpd."ID_DEUDA"=pago."ID_DEUDA" WHERE dpd."ID_PRODUCTO"=$2',
+      [id_deudor,id_producto])
+      .then((data) => {
+        res.send(data);
+      })
+      .catch(err => {
+        res.status(500);
+        console.log(err);
       });
   }
 

@@ -1,0 +1,932 @@
+CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
+
+
+--
+-- TOC entry 2987 (class 0 OID 0)
+-- Dependencies: 1
+-- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+
+
+SET search_path = public, pg_catalog;
+
+--
+-- TOC entry 222 (class 1255 OID 16574)
+-- Name: delete_deuda(integer, integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION delete_deuda(id_deudor integer, id_producto integer, id_deuda integer) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      isExists integer;
+    BEGIN
+      SELECT COUNT(*) INTO isExists FROM "DEUDOR_PRODUCTO_DEUDA" WHERE "ID_DEUDOR"=id_deudor AND "ID_PRODUCTO"=id_producto AND "ID_DEUDA"=id_deuda;
+      IF isExists = 1 then
+        DELETE FROM "DEUDOR_PRODUCTO_DEUDA" WHERE "ID_DEUDOR"=id_deudor AND "ID_PRODUCTO"=id_producto AND "ID_DEUDA"=id_deuda;
+        DELETE FROM "DEUDA" WHERE "ID_DEUDA" = id_deuda;
+        RETURN 1;
+      ELSE
+        RETURN 0;
+      END IF;
+    END;
+    $$;
+
+
+ALTER FUNCTION public.delete_deuda(id_deudor integer, id_producto integer, id_deuda integer) OWNER TO postgres;
+
+--
+-- TOC entry 226 (class 1255 OID 16597)
+-- Name: insert_deuda(numeric, integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION insert_deuda(monto numeric, id_deudor integer, id_producto integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$	DECLARE
+      id_deuda integer;
+    BEGIN
+      IF monto>0 THEN
+        INSERT INTO "DEUDA"("MONTO","SALDO","ESTADO") VALUES(monto,monto, 1) RETURNING "ID_DEUDA" into id_deuda;
+        INSERT INTO "DEUDOR_PRODUCTO_DEUDA" VALUES (id_deudor, id_producto, id_deuda);
+        UPDATE "DEUDOR" SET "ESTADO" = 1 WHERE "ID_DEUDOR"=id_deudor;
+      ELSE RETURN;
+      END IF;
+    END;
+$$;
+
+
+ALTER FUNCTION public.insert_deuda(monto numeric, id_deudor integer, id_producto integer) OWNER TO postgres;
+
+--
+-- TOC entry 230 (class 1255 OID 16577)
+-- Name: insert_pago(character varying, numeric, integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION insert_pago(fecha character varying, monto numeric, id_deuda integer, id_cobrador integer) RETURNS boolean
+    LANGUAGE plpgsql
+    AS $$    DECLARE
+        saldo_deuda numeric(12,2);
+        cantidad_deudas integer;
+        id_deudor integer;
+	BEGIN
+    	IF monto>0 THEN
+        	
+        	SELECT "SALDO" into saldo_deuda FROM "DEUDA" WHERE "ID_DEUDA"=id_deuda;
+            
+            saldo_deuda = saldo_deuda - monto;
+            IF saldo_deuda >= 0 THEN
+            	INSERT INTO "PAGO"("FECHA","MONTO","ID_DEUDA","ID_COBRADOR") 
+            	VALUES (fecha, monto, id_deuda, id_cobrador);
+               	IF(saldo_deuda!=0) THEN
+                	UPDATE "DEUDA" SET "SALDO"=saldo_deuda WHERE "ID_DEUDA"=id_deuda;
+                ELSE
+                	UPDATE "DEUDA" SET "SALDO"=saldo_deuda, "ESTADO" = 0
+                    WHERE "ID_DEUDA"=id_deuda;
+                    SELECT COUNT(deuda."ESTADO") into cantidad_deudas 
+                    FROM "DEUDOR_PRODUCTO_DEUDA" as dpd INNER JOIN "DEUDA" as deuda
+                    ON dpd."ID_DEUDA"=deuda."ID_DEUDA"
+                    WHERE deuda."ESTADO"=1;
+                    SELECT dpd."ID_DEUDOR" into id_deudor 
+                    FROM "DEUDOR_PRODUCTO_DEUDA" as dpd INNER JOIN "DEUDA" as deuda
+                    ON dpd."ID_DEUDA"=deuda."ID_DEUDA" LIMIT 1;
+                    IF cantidad_deudas = 0 THEN
+                    	UPDATE "DEUDOR" SET "ESTADO"=0 WHERE "ID_DEUDOR"=id_deudor;
+                    END IF;
+                END IF;
+            	RETURN TRUE;
+            ELSE 
+            	RETURN FALSE;
+            END IF;
+        ELSE
+        	RETURN false;
+    	END IF;
+    END;
+    $$;
+
+
+ALTER FUNCTION public.insert_pago(fecha character varying, monto numeric, id_deuda integer, id_cobrador integer) OWNER TO postgres;
+
+--
+-- TOC entry 228 (class 1255 OID 16596)
+-- Name: insert_usuario(character varying, character varying, character varying, character varying, character varying, character varying, character varying, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION insert_usuario(nombre character varying, ape_pat character varying, ape_mat character varying, dni character varying, pssw character varying, telefono character varying, direccion character varying, id_perfil integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+	id_usuario integer;
+	nom_perfil character varying(50);
+BEGIN
+	INSERT INTO "USUARIO" ("NOMBRE","APELLIDO_PATERNO", "APELLIDO_MATERNO", "DNI", "PASSWORD", "TELEFONO", "DIRECCION")
+    VALUES (nombre,ape_pat,ape_mat, dni, md5(pssw || 'cobranza'||'cha'), telefono, direccion) RETURNING "ID_USUARIO" into id_usuario;
+    SELECT "NOMBRE" into nom_perfil FROM "PERFIL" WHERE "ID_PERFIL" = id_perfil;
+    IF nom_perfil = 'COBRADOR' then
+    	INSERT INTO "COBRADOR" ("ID_USUARIO") VALUES(id_usuario);
+    ELSE 
+    	IF nom_perfil = 'DEUDOR' then
+    		INSERT INTO "DEUDOR"("ID_USUARIO", "ESTADO") VALUES(id_usuario, 1);
+        END IF;
+    END IF;
+    INSERT INTO "USUARIO_PERFIL"("ID_USUARIO", "ID_PERFIL") VALUES(id_usuario, id_perfil);
+END;
+$$;
+
+
+ALTER FUNCTION public.insert_usuario(nombre character varying, ape_pat character varying, ape_mat character varying, dni character varying, pssw character varying, telefono character varying, direccion character varying, id_perfil integer) OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_with_oids = false;
+
+--
+-- TOC entry 205 (class 1259 OID 16469)
+-- Name: AREA; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "AREA" (
+    "ID_AREA" integer NOT NULL,
+    "NOMBRE" character varying(100) NOT NULL
+);
+
+
+ALTER TABLE "AREA" OWNER TO postgres;
+
+--
+-- TOC entry 204 (class 1259 OID 16467)
+-- Name: AREA_ID_AREA_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE "AREA_ID_AREA_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "AREA_ID_AREA_seq" OWNER TO postgres;
+
+--
+-- TOC entry 2988 (class 0 OID 0)
+-- Dependencies: 204
+-- Name: AREA_ID_AREA_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE "AREA_ID_AREA_seq" OWNED BY "AREA"."ID_AREA";
+
+
+--
+-- TOC entry 207 (class 1259 OID 16477)
+-- Name: COBRADOR; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "COBRADOR" (
+    "ID_COBRADOR" integer NOT NULL,
+    "ID_USUARIO" integer NOT NULL
+);
+
+
+ALTER TABLE "COBRADOR" OWNER TO postgres;
+
+--
+-- TOC entry 214 (class 1259 OID 16578)
+-- Name: COBRADOR_AREA; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "COBRADOR_AREA" (
+    "ID_COBRADOR" integer NOT NULL,
+    "ID_AREA" integer NOT NULL
+);
+
+
+ALTER TABLE "COBRADOR_AREA" OWNER TO postgres;
+
+--
+-- TOC entry 206 (class 1259 OID 16475)
+-- Name: COBRADOR_ID_COBRADOR_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE "COBRADOR_ID_COBRADOR_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "COBRADOR_ID_COBRADOR_seq" OWNER TO postgres;
+
+--
+-- TOC entry 2989 (class 0 OID 0)
+-- Dependencies: 206
+-- Name: COBRADOR_ID_COBRADOR_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE "COBRADOR_ID_COBRADOR_seq" OWNED BY "COBRADOR"."ID_COBRADOR";
+
+
+--
+-- TOC entry 203 (class 1259 OID 16461)
+-- Name: DEUDA; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "DEUDA" (
+    "ID_DEUDA" integer NOT NULL,
+    "MONTO" numeric(12,2) NOT NULL,
+    "SALDO" numeric(12,2) NOT NULL,
+    "ESTADO" smallint NOT NULL
+);
+
+
+ALTER TABLE "DEUDA" OWNER TO postgres;
+
+--
+-- TOC entry 202 (class 1259 OID 16459)
+-- Name: DEUDA_ID_DEUDA_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE "DEUDA_ID_DEUDA_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "DEUDA_ID_DEUDA_seq" OWNER TO postgres;
+
+--
+-- TOC entry 2990 (class 0 OID 0)
+-- Dependencies: 202
+-- Name: DEUDA_ID_DEUDA_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE "DEUDA_ID_DEUDA_seq" OWNED BY "DEUDA"."ID_DEUDA";
+
+
+--
+-- TOC entry 211 (class 1259 OID 16513)
+-- Name: DEUDOR; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "DEUDOR" (
+    "ID_DEUDOR" integer NOT NULL,
+    "ID_USUARIO" integer NOT NULL,
+    "ESTADO" smallint NOT NULL
+);
+
+
+ALTER TABLE "DEUDOR" OWNER TO postgres;
+
+--
+-- TOC entry 210 (class 1259 OID 16511)
+-- Name: DEUDOR_ID_DEUDOR_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE "DEUDOR_ID_DEUDOR_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "DEUDOR_ID_DEUDOR_seq" OWNER TO postgres;
+
+--
+-- TOC entry 2991 (class 0 OID 0)
+-- Dependencies: 210
+-- Name: DEUDOR_ID_DEUDOR_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE "DEUDOR_ID_DEUDOR_seq" OWNED BY "DEUDOR"."ID_DEUDOR";
+
+
+--
+-- TOC entry 213 (class 1259 OID 16537)
+-- Name: DEUDOR_PRODUCTO_DEUDA; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "DEUDOR_PRODUCTO_DEUDA" (
+    "ID_DEUDOR" integer NOT NULL,
+    "ID_PRODUCTO" integer NOT NULL,
+    "ID_DEUDA" integer NOT NULL
+);
+
+
+ALTER TABLE "DEUDOR_PRODUCTO_DEUDA" OWNER TO postgres;
+
+--
+-- TOC entry 209 (class 1259 OID 16495)
+-- Name: PAGO; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "PAGO" (
+    "ID_PAGO" integer NOT NULL,
+    "FECHA" character varying(20) NOT NULL,
+    "MONTO" numeric(12,2) NOT NULL,
+    "ID_DEUDA" integer NOT NULL,
+    "ID_COBRADOR" integer NOT NULL
+);
+
+
+ALTER TABLE "PAGO" OWNER TO postgres;
+
+--
+-- TOC entry 208 (class 1259 OID 16493)
+-- Name: PAGO_ID_PAGO_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE "PAGO_ID_PAGO_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "PAGO_ID_PAGO_seq" OWNER TO postgres;
+
+--
+-- TOC entry 2992 (class 0 OID 0)
+-- Dependencies: 208
+-- Name: PAGO_ID_PAGO_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE "PAGO_ID_PAGO_seq" OWNED BY "PAGO"."ID_PAGO";
+
+
+--
+-- TOC entry 199 (class 1259 OID 16445)
+-- Name: PERFIL; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "PERFIL" (
+    "ID_PERFIL" integer NOT NULL,
+    "NOMBRE" character varying(50) NOT NULL,
+    "DESCRIPCION" character varying(100)
+);
+
+
+ALTER TABLE "PERFIL" OWNER TO postgres;
+
+--
+-- TOC entry 198 (class 1259 OID 16443)
+-- Name: PERFIL_ID_PERFIL_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE "PERFIL_ID_PERFIL_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "PERFIL_ID_PERFIL_seq" OWNER TO postgres;
+
+--
+-- TOC entry 2993 (class 0 OID 0)
+-- Dependencies: 198
+-- Name: PERFIL_ID_PERFIL_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE "PERFIL_ID_PERFIL_seq" OWNED BY "PERFIL"."ID_PERFIL";
+
+
+--
+-- TOC entry 201 (class 1259 OID 16453)
+-- Name: PRODUCTO; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "PRODUCTO" (
+    "ID_PRODUCTO" integer NOT NULL,
+    "NOMBRE" character varying(100) NOT NULL,
+    "PRECIO" numeric(12,2) NOT NULL
+);
+
+
+ALTER TABLE "PRODUCTO" OWNER TO postgres;
+
+--
+-- TOC entry 200 (class 1259 OID 16451)
+-- Name: PRODUCTO_ID_PRODUCTO_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE "PRODUCTO_ID_PRODUCTO_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "PRODUCTO_ID_PRODUCTO_seq" OWNER TO postgres;
+
+--
+-- TOC entry 2994 (class 0 OID 0)
+-- Dependencies: 200
+-- Name: PRODUCTO_ID_PRODUCTO_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE "PRODUCTO_ID_PRODUCTO_seq" OWNED BY "PRODUCTO"."ID_PRODUCTO";
+
+
+--
+-- TOC entry 197 (class 1259 OID 16437)
+-- Name: USUARIO; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "USUARIO" (
+    "ID_USUARIO" integer NOT NULL,
+    "NOMBRE" character varying(45) NOT NULL,
+    "APELLIDO_PATERNO" character varying(20) NOT NULL,
+    "APELLIDO_MATERNO" character varying(20) NOT NULL,
+    "DNI" character varying(8) NOT NULL,
+    "PASSWORD" character varying NOT NULL,
+    "TELEFONO" character varying(9) NOT NULL,
+    "DIRECCION" character varying(100) NOT NULL
+);
+
+
+ALTER TABLE "USUARIO" OWNER TO postgres;
+
+--
+-- TOC entry 196 (class 1259 OID 16435)
+-- Name: USUARIO_ID_USUARIO_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE "USUARIO_ID_USUARIO_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "USUARIO_ID_USUARIO_seq" OWNER TO postgres;
+
+--
+-- TOC entry 2995 (class 0 OID 0)
+-- Dependencies: 196
+-- Name: USUARIO_ID_USUARIO_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE "USUARIO_ID_USUARIO_seq" OWNED BY "USUARIO"."ID_USUARIO";
+
+
+--
+-- TOC entry 212 (class 1259 OID 16524)
+-- Name: USUARIO_PERFIL; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE "USUARIO_PERFIL" (
+    "ID_USUARIO" integer NOT NULL,
+    "ID_PERFIL" integer NOT NULL
+);
+
+
+ALTER TABLE "USUARIO_PERFIL" OWNER TO postgres;
+
+--
+-- TOC entry 2810 (class 2604 OID 16472)
+-- Name: AREA ID_AREA; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "AREA" ALTER COLUMN "ID_AREA" SET DEFAULT nextval('"AREA_ID_AREA_seq"'::regclass);
+
+
+--
+-- TOC entry 2811 (class 2604 OID 16480)
+-- Name: COBRADOR ID_COBRADOR; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "COBRADOR" ALTER COLUMN "ID_COBRADOR" SET DEFAULT nextval('"COBRADOR_ID_COBRADOR_seq"'::regclass);
+
+
+--
+-- TOC entry 2809 (class 2604 OID 16464)
+-- Name: DEUDA ID_DEUDA; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "DEUDA" ALTER COLUMN "ID_DEUDA" SET DEFAULT nextval('"DEUDA_ID_DEUDA_seq"'::regclass);
+
+
+--
+-- TOC entry 2813 (class 2604 OID 16516)
+-- Name: DEUDOR ID_DEUDOR; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "DEUDOR" ALTER COLUMN "ID_DEUDOR" SET DEFAULT nextval('"DEUDOR_ID_DEUDOR_seq"'::regclass);
+
+
+--
+-- TOC entry 2812 (class 2604 OID 16498)
+-- Name: PAGO ID_PAGO; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "PAGO" ALTER COLUMN "ID_PAGO" SET DEFAULT nextval('"PAGO_ID_PAGO_seq"'::regclass);
+
+
+--
+-- TOC entry 2807 (class 2604 OID 16448)
+-- Name: PERFIL ID_PERFIL; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "PERFIL" ALTER COLUMN "ID_PERFIL" SET DEFAULT nextval('"PERFIL_ID_PERFIL_seq"'::regclass);
+
+
+--
+-- TOC entry 2808 (class 2604 OID 16456)
+-- Name: PRODUCTO ID_PRODUCTO; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "PRODUCTO" ALTER COLUMN "ID_PRODUCTO" SET DEFAULT nextval('"PRODUCTO_ID_PRODUCTO_seq"'::regclass);
+
+
+--
+-- TOC entry 2806 (class 2604 OID 16440)
+-- Name: USUARIO ID_USUARIO; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "USUARIO" ALTER COLUMN "ID_USUARIO" SET DEFAULT nextval('"USUARIO_ID_USUARIO_seq"'::regclass);
+
+
+--
+-- TOC entry 2971 (class 0 OID 16469)
+-- Dependencies: 205
+-- Data for Name: AREA; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "AREA" ("ID_AREA", "NOMBRE") VALUES (2, 'Chorrillos');
+
+
+--
+-- TOC entry 2973 (class 0 OID 16477)
+-- Dependencies: 207
+-- Data for Name: COBRADOR; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "COBRADOR" ("ID_COBRADOR", "ID_USUARIO") VALUES (1, 4);
+INSERT INTO "COBRADOR" ("ID_COBRADOR", "ID_USUARIO") VALUES (2, 9);
+INSERT INTO "COBRADOR" ("ID_COBRADOR", "ID_USUARIO") VALUES (3, 11);
+
+
+--
+-- TOC entry 2980 (class 0 OID 16578)
+-- Dependencies: 214
+-- Data for Name: COBRADOR_AREA; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+
+
+--
+-- TOC entry 2969 (class 0 OID 16461)
+-- Dependencies: 203
+-- Data for Name: DEUDA; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "DEUDA" ("ID_DEUDA", "MONTO", "SALDO", "ESTADO") VALUES (5, 1000.00, 0.00, 0);
+INSERT INTO "DEUDA" ("ID_DEUDA", "MONTO", "SALDO", "ESTADO") VALUES (7, 1250.20, 0.00, 0);
+INSERT INTO "DEUDA" ("ID_DEUDA", "MONTO", "SALDO", "ESTADO") VALUES (8, 600.00, 0.00, 0);
+INSERT INTO "DEUDA" ("ID_DEUDA", "MONTO", "SALDO", "ESTADO") VALUES (9, 600.00, 0.00, 0);
+
+
+--
+-- TOC entry 2977 (class 0 OID 16513)
+-- Dependencies: 211
+-- Data for Name: DEUDOR; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "DEUDOR" ("ID_DEUDOR", "ID_USUARIO", "ESTADO") VALUES (2, 5, 1);
+INSERT INTO "DEUDOR" ("ID_DEUDOR", "ID_USUARIO", "ESTADO") VALUES (1, 4, 0);
+
+
+--
+-- TOC entry 2979 (class 0 OID 16537)
+-- Dependencies: 213
+-- Data for Name: DEUDOR_PRODUCTO_DEUDA; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "DEUDOR_PRODUCTO_DEUDA" ("ID_DEUDOR", "ID_PRODUCTO", "ID_DEUDA") VALUES (1, 2, 5);
+INSERT INTO "DEUDOR_PRODUCTO_DEUDA" ("ID_DEUDOR", "ID_PRODUCTO", "ID_DEUDA") VALUES (1, 2, 7);
+INSERT INTO "DEUDOR_PRODUCTO_DEUDA" ("ID_DEUDOR", "ID_PRODUCTO", "ID_DEUDA") VALUES (1, 2, 8);
+INSERT INTO "DEUDOR_PRODUCTO_DEUDA" ("ID_DEUDOR", "ID_PRODUCTO", "ID_DEUDA") VALUES (2, 2, 9);
+
+
+--
+-- TOC entry 2975 (class 0 OID 16495)
+-- Dependencies: 209
+-- Data for Name: PAGO; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "PAGO" ("ID_PAGO", "FECHA", "MONTO", "ID_DEUDA", "ID_COBRADOR") VALUES (2, '01/02/2018 09:58:20', 200.00, 5, 1);
+INSERT INTO "PAGO" ("ID_PAGO", "FECHA", "MONTO", "ID_DEUDA", "ID_COBRADOR") VALUES (4, '01/02/2018 10:07:23', 150.00, 5, 1);
+INSERT INTO "PAGO" ("ID_PAGO", "FECHA", "MONTO", "ID_DEUDA", "ID_COBRADOR") VALUES (5, '01/02/2018 11:52:24', 650.00, 5, 1);
+INSERT INTO "PAGO" ("ID_PAGO", "FECHA", "MONTO", "ID_DEUDA", "ID_COBRADOR") VALUES (6, '01/02/2018 12:06:24', 1250.20, 7, 1);
+INSERT INTO "PAGO" ("ID_PAGO", "FECHA", "MONTO", "ID_DEUDA", "ID_COBRADOR") VALUES (7, '01/02/2018 12:06:24', 600.00, 8, 1);
+INSERT INTO "PAGO" ("ID_PAGO", "FECHA", "MONTO", "ID_DEUDA", "ID_COBRADOR") VALUES (8, '1/2/2018 12:19:14', 200.00, 9, 1);
+INSERT INTO "PAGO" ("ID_PAGO", "FECHA", "MONTO", "ID_DEUDA", "ID_COBRADOR") VALUES (9, '1/2/2018 12:19:50', 300.00, 9, 1);
+INSERT INTO "PAGO" ("ID_PAGO", "FECHA", "MONTO", "ID_DEUDA", "ID_COBRADOR") VALUES (10, '1/2/2018 12:20:36', 100.00, 9, 1);
+
+
+--
+-- TOC entry 2965 (class 0 OID 16445)
+-- Dependencies: 199
+-- Data for Name: PERFIL; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "PERFIL" ("ID_PERFIL", "NOMBRE", "DESCRIPCION") VALUES (1, 'DEUDOR', 'Consumidor de productos de este establecimiento');
+INSERT INTO "PERFIL" ("ID_PERFIL", "NOMBRE", "DESCRIPCION") VALUES (2, 'COBRADOR', 'Trabajador encargado de cobrar a los deudores');
+INSERT INTO "PERFIL" ("ID_PERFIL", "NOMBRE", "DESCRIPCION") VALUES (3, 'ADMINISTRADOR', 'Jefe encargado de administrar');
+INSERT INTO "PERFIL" ("ID_PERFIL", "NOMBRE", "DESCRIPCION") VALUES (4, 'SUPER USER', 'Usuario con el permiso de hacer todos los cambios disponibles');
+
+
+--
+-- TOC entry 2967 (class 0 OID 16453)
+-- Dependencies: 201
+-- Data for Name: PRODUCTO; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "PRODUCTO" ("ID_PRODUCTO", "NOMBRE", "PRECIO") VALUES (2, 'Tabla de madera', 13.50);
+
+
+--
+-- TOC entry 2963 (class 0 OID 16437)
+-- Dependencies: 197
+-- Data for Name: USUARIO; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "USUARIO" ("ID_USUARIO", "NOMBRE", "APELLIDO_PATERNO", "APELLIDO_MATERNO", "DNI", "PASSWORD", "TELEFONO", "DIRECCION") VALUES (4, 'Carlos Daniel', 'Villagomez', 'Rodriguez', '73799657', '35ab7dde17f12f63e59ceaa62e8bcc99', '991783666', 'Jr Justo Naveda 241');
+INSERT INTO "USUARIO" ("ID_USUARIO", "NOMBRE", "APELLIDO_PATERNO", "APELLIDO_MATERNO", "DNI", "PASSWORD", "TELEFONO", "DIRECCION") VALUES (5, 'Carlos Daniel', 'Villagomez', 'Rodriguez', '73799657', 'd5bccb80a63852cf18d1790e2902966a', '73799657', '');
+INSERT INTO "USUARIO" ("ID_USUARIO", "NOMBRE", "APELLIDO_PATERNO", "APELLIDO_MATERNO", "DNI", "PASSWORD", "TELEFONO", "DIRECCION") VALUES (7, 'Carlos Daniel', 'Villagomez', 'Rodriguez', '73799657', 'd5bccb80a63852cf18d1790e2902966a', '73799657', '');
+INSERT INTO "USUARIO" ("ID_USUARIO", "NOMBRE", "APELLIDO_PATERNO", "APELLIDO_MATERNO", "DNI", "PASSWORD", "TELEFONO", "DIRECCION") VALUES (9, 'Carlos Daniel', 'Villagomez', 'Rodriguez', '73799657', 'd5bccb80a63852cf18d1790e2902966a', '73799657', '');
+INSERT INTO "USUARIO" ("ID_USUARIO", "NOMBRE", "APELLIDO_PATERNO", "APELLIDO_MATERNO", "DNI", "PASSWORD", "TELEFONO", "DIRECCION") VALUES (10, 'Carlos Daniel', 'Villagomez', 'Rodriguez', '73799657', 'd5bccb80a63852cf18d1790e2902966a', '991783666', '');
+INSERT INTO "USUARIO" ("ID_USUARIO", "NOMBRE", "APELLIDO_PATERNO", "APELLIDO_MATERNO", "DNI", "PASSWORD", "TELEFONO", "DIRECCION") VALUES (11, 'Carlos Daniel', 'Villagomez', 'Rodriguez', '73799657', '35ab7dde17f12f63e59ceaa62e8bcc99', '991783666', 'Jr Justo Naveda 241');
+
+
+--
+-- TOC entry 2978 (class 0 OID 16524)
+-- Dependencies: 212
+-- Data for Name: USUARIO_PERFIL; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+INSERT INTO "USUARIO_PERFIL" ("ID_USUARIO", "ID_PERFIL") VALUES (5, 1);
+INSERT INTO "USUARIO_PERFIL" ("ID_USUARIO", "ID_PERFIL") VALUES (7, 4);
+INSERT INTO "USUARIO_PERFIL" ("ID_USUARIO", "ID_PERFIL") VALUES (9, 2);
+INSERT INTO "USUARIO_PERFIL" ("ID_USUARIO", "ID_PERFIL") VALUES (10, 3);
+INSERT INTO "USUARIO_PERFIL" ("ID_USUARIO", "ID_PERFIL") VALUES (11, 2);
+
+
+--
+-- TOC entry 2996 (class 0 OID 0)
+-- Dependencies: 204
+-- Name: AREA_ID_AREA_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"AREA_ID_AREA_seq"', 2, true);
+
+
+--
+-- TOC entry 2997 (class 0 OID 0)
+-- Dependencies: 206
+-- Name: COBRADOR_ID_COBRADOR_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"COBRADOR_ID_COBRADOR_seq"', 3, true);
+
+
+--
+-- TOC entry 2998 (class 0 OID 0)
+-- Dependencies: 202
+-- Name: DEUDA_ID_DEUDA_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"DEUDA_ID_DEUDA_seq"', 9, true);
+
+
+--
+-- TOC entry 2999 (class 0 OID 0)
+-- Dependencies: 210
+-- Name: DEUDOR_ID_DEUDOR_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"DEUDOR_ID_DEUDOR_seq"', 2, true);
+
+
+--
+-- TOC entry 3000 (class 0 OID 0)
+-- Dependencies: 208
+-- Name: PAGO_ID_PAGO_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"PAGO_ID_PAGO_seq"', 10, true);
+
+
+--
+-- TOC entry 3001 (class 0 OID 0)
+-- Dependencies: 198
+-- Name: PERFIL_ID_PERFIL_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"PERFIL_ID_PERFIL_seq"', 4, true);
+
+
+--
+-- TOC entry 3002 (class 0 OID 0)
+-- Dependencies: 200
+-- Name: PRODUCTO_ID_PRODUCTO_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"PRODUCTO_ID_PRODUCTO_seq"', 2, true);
+
+
+--
+-- TOC entry 3003 (class 0 OID 0)
+-- Dependencies: 196
+-- Name: USUARIO_ID_USUARIO_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"USUARIO_ID_USUARIO_seq"', 11, true);
+
+
+--
+-- TOC entry 2823 (class 2606 OID 16474)
+-- Name: AREA AREA_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "AREA"
+    ADD CONSTRAINT "AREA_pkey" PRIMARY KEY ("ID_AREA");
+
+
+--
+-- TOC entry 2825 (class 2606 OID 16482)
+-- Name: COBRADOR COBRADOR_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "COBRADOR"
+    ADD CONSTRAINT "COBRADOR_pkey" PRIMARY KEY ("ID_COBRADOR");
+
+
+--
+-- TOC entry 2821 (class 2606 OID 16466)
+-- Name: DEUDA DEUDA_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "DEUDA"
+    ADD CONSTRAINT "DEUDA_pkey" PRIMARY KEY ("ID_DEUDA");
+
+
+--
+-- TOC entry 2829 (class 2606 OID 16518)
+-- Name: DEUDOR DEUDOR_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "DEUDOR"
+    ADD CONSTRAINT "DEUDOR_pkey" PRIMARY KEY ("ID_DEUDOR");
+
+
+--
+-- TOC entry 2827 (class 2606 OID 16500)
+-- Name: PAGO PAGO_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "PAGO"
+    ADD CONSTRAINT "PAGO_pkey" PRIMARY KEY ("ID_PAGO");
+
+
+--
+-- TOC entry 2817 (class 2606 OID 16450)
+-- Name: PERFIL PERFIL_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "PERFIL"
+    ADD CONSTRAINT "PERFIL_pkey" PRIMARY KEY ("ID_PERFIL");
+
+
+--
+-- TOC entry 2819 (class 2606 OID 16458)
+-- Name: PRODUCTO PRODUCTO_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "PRODUCTO"
+    ADD CONSTRAINT "PRODUCTO_pkey" PRIMARY KEY ("ID_PRODUCTO");
+
+
+--
+-- TOC entry 2815 (class 2606 OID 16442)
+-- Name: USUARIO USUARIO_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "USUARIO"
+    ADD CONSTRAINT "USUARIO_pkey" PRIMARY KEY ("ID_USUARIO");
+
+
+--
+-- TOC entry 2840 (class 2606 OID 16586)
+-- Name: COBRADOR_AREA COBRADOR_AREA_ID_AREA_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "COBRADOR_AREA"
+    ADD CONSTRAINT "COBRADOR_AREA_ID_AREA_fkey" FOREIGN KEY ("ID_AREA") REFERENCES "AREA"("ID_AREA");
+
+
+--
+-- TOC entry 2839 (class 2606 OID 16581)
+-- Name: COBRADOR_AREA COBRADOR_AREA_ID_COBRADOR_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "COBRADOR_AREA"
+    ADD CONSTRAINT "COBRADOR_AREA_ID_COBRADOR_fkey" FOREIGN KEY ("ID_COBRADOR") REFERENCES "COBRADOR"("ID_COBRADOR");
+
+
+--
+-- TOC entry 2830 (class 2606 OID 16483)
+-- Name: COBRADOR COBRADOR_ID_USUARIO_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "COBRADOR"
+    ADD CONSTRAINT "COBRADOR_ID_USUARIO_fkey" FOREIGN KEY ("ID_USUARIO") REFERENCES "USUARIO"("ID_USUARIO");
+
+
+--
+-- TOC entry 2833 (class 2606 OID 16519)
+-- Name: DEUDOR DEUDOR_ID_USUARIO_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "DEUDOR"
+    ADD CONSTRAINT "DEUDOR_ID_USUARIO_fkey" FOREIGN KEY ("ID_USUARIO") REFERENCES "USUARIO"("ID_USUARIO");
+
+
+--
+-- TOC entry 2838 (class 2606 OID 16550)
+-- Name: DEUDOR_PRODUCTO_DEUDA DEUDOR_PRODUCTO_DEUDA_ID_DEUDA_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "DEUDOR_PRODUCTO_DEUDA"
+    ADD CONSTRAINT "DEUDOR_PRODUCTO_DEUDA_ID_DEUDA_fkey" FOREIGN KEY ("ID_DEUDA") REFERENCES "DEUDA"("ID_DEUDA");
+
+
+--
+-- TOC entry 2836 (class 2606 OID 16540)
+-- Name: DEUDOR_PRODUCTO_DEUDA DEUDOR_PRODUCTO_DEUDA_ID_DEUDOR_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "DEUDOR_PRODUCTO_DEUDA"
+    ADD CONSTRAINT "DEUDOR_PRODUCTO_DEUDA_ID_DEUDOR_fkey" FOREIGN KEY ("ID_DEUDOR") REFERENCES "DEUDOR"("ID_DEUDOR");
+
+
+--
+-- TOC entry 2837 (class 2606 OID 16545)
+-- Name: DEUDOR_PRODUCTO_DEUDA DEUDOR_PRODUCTO_DEUDA_ID_PRODUCTO_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "DEUDOR_PRODUCTO_DEUDA"
+    ADD CONSTRAINT "DEUDOR_PRODUCTO_DEUDA_ID_PRODUCTO_fkey" FOREIGN KEY ("ID_PRODUCTO") REFERENCES "PRODUCTO"("ID_PRODUCTO");
+
+
+--
+-- TOC entry 2832 (class 2606 OID 16506)
+-- Name: PAGO PAGO_ID_COBRADOR_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "PAGO"
+    ADD CONSTRAINT "PAGO_ID_COBRADOR_fkey" FOREIGN KEY ("ID_COBRADOR") REFERENCES "COBRADOR"("ID_COBRADOR");
+
+
+--
+-- TOC entry 2831 (class 2606 OID 16501)
+-- Name: PAGO PAGO_ID_DEUDA_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "PAGO"
+    ADD CONSTRAINT "PAGO_ID_DEUDA_fkey" FOREIGN KEY ("ID_DEUDA") REFERENCES "DEUDA"("ID_DEUDA");
+
+
+--
+-- TOC entry 2835 (class 2606 OID 16532)
+-- Name: USUARIO_PERFIL USUARIO_PERFIL_ID_PERFIL_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "USUARIO_PERFIL"
+    ADD CONSTRAINT "USUARIO_PERFIL_ID_PERFIL_fkey" FOREIGN KEY ("ID_PERFIL") REFERENCES "PERFIL"("ID_PERFIL");
+
+
+--
+-- TOC entry 2834 (class 2606 OID 16527)
+-- Name: USUARIO_PERFIL USUARIO_PERFIL_ID_USUARIO_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "USUARIO_PERFIL"
+    ADD CONSTRAINT "USUARIO_PERFIL_ID_USUARIO_fkey" FOREIGN KEY ("ID_USUARIO") REFERENCES "USUARIO"("ID_USUARIO");
+
+
+-- Completed on 2018-02-01 21:09:03 -05
+
+--
+-- PostgreSQL database dump complete
+--
+
