@@ -1,8 +1,8 @@
 # SistemaCobranza
 
-Rutas
+## Rutas
 
-Usuario
+### Usuario
 
 	GET:
 		/usuario/                         Obtiene todos los usuarios
@@ -23,7 +23,7 @@ Usuario
 	DELETE:
 		/usuario/id                       Elimina el usuario con ese id
 	
-Producto
+### Producto
 
 	GET:
 		/producto/
@@ -38,7 +38,7 @@ Producto
 	DELETE
 		/producto/id
 	
-Pago
+### Pago
 
 	GET
 		/pago/
@@ -47,7 +47,7 @@ Pago
 	POST
 		/pago															Crea un nuevo pago(Body: monto, id_deuda, id_cobrador)
 	
-Deuda
+### Deuda
 
 	GET
 		/deuda/
@@ -62,7 +62,7 @@ Deuda
 	DELETE
 		/deuda/id													Elimina una deuda //Deprecado :v
 	
-Area
+### Area
 	
 	GET
 
@@ -82,7 +82,7 @@ Area
 		/area/id													Elimina una area
 
 
-Deudor
+### Deudor
 
 	GET
 		/deudor/
@@ -95,3 +95,10 @@ Deudor
 		/deudor/id/productos
 		/deudor/id_deudor/productos/id_producto
 		/deudor/id_deudor/productos/id_producto/pagos
+### Util
+	
+	GET
+		/search?search=...	(params separados por "-")
+	
+	POST
+		/login/			(body: 	dni,pssw)
