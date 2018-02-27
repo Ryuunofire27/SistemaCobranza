@@ -5,7 +5,24 @@ const conn = require('../database/db');
 class Producto{
 
   getAll(req,res,next){
-    conn.any('SELECT * FROM "PRODUCTO"')
+    const limit = parseInt(req.query.limit),
+      page = parseInt(req.query.page),
+      producto = {
+        limit,
+        page
+      };
+    let query = 'SELECT * FROM "PRODUCTO"';
+
+    if(limit){
+      query += "\n" +
+        "LIMIT ${limit}";
+      if(page){
+        query += "\n" +
+          "OFFSET ${limit}*(${page}-1)";
+      }
+    }
+
+    conn.any(query, producto)
       .then((data) => {
         res.send(data);
       })

@@ -7,8 +7,8 @@ class Util{
   searchDeudor(req,res,next){
 
     const busquedaQ = req.query.search,
-      limit = (req.query.limit ? req.query.limit : 10),
-      page = (req.query.page ? req.query.page : 1),
+      limit = (req.query.limit ? parseInt(req.query.limit) : 10),
+      page = (req.query.page ? parseInt(req.query.page) : 1),
       busqueda = !isNaN(busquedaQ) ? busquedaQ: busquedaQ.split("-"),
       search = {
         s1: Array.isArray(busqueda) ? busqueda[0] : busqueda +'%',

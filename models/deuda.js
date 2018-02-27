@@ -5,7 +5,23 @@ const conn = require('../database/db');
 class Deuda{
 
   getAll(req,res,next){
-    conn.any('SELECT * FROM "DEUDA"')
+    const limit = parseInt(req.query.limit),
+      page = parseInt(req.query.page),
+      deuda = {
+        limit,
+        page
+      };
+    let query = 'SELECT * FROM "DEUDA"';
+
+    if(limit){
+      query += "\n" +
+        "LIMIT ${limit}";
+      if(page){
+        query += "\n" +
+          "OFFSET ${limit}*(${page}-1)";
+      }
+    }
+    conn.any(query, deuda)
       .then((data) => {
         res.send(data);
       })
