@@ -7,12 +7,16 @@ class Util{
   searchDeudor(req,res,next){
 
     const busquedaQ = req.query.search,
+      limit = (req.query.limit ? req.query.limit : 10),
+      page = (req.query.page ? req.query.page : 1),
       busqueda = !isNaN(busquedaQ) ? busquedaQ: busquedaQ.split("-"),
       search = {
         s1: Array.isArray(busqueda) ? busqueda[0] : busqueda +'%',
         s2: busqueda[1],
         s3: busqueda[2],
-        s4: busqueda[3]
+        s4: busqueda[3],
+        limit,
+        page
       };
 
     let query = '';
@@ -47,6 +51,9 @@ class Util{
         ' OR (u."NOMBRE" ILIKE CONCAT(${s3},\' \',${s4},\'%\') ' +
         ' AND u."APELLIDO_PATERNO" ILIKE CONCAT(${s1},\'%\') AND u."APELLIDO_MATERNO" ILIKE CONCAT(${s2},\'%\'))';
     }
+
+    query += '\n' +
+      'LIMIT ${limit} OFFSET (${limit}*(${page}-1))';
 
     conn.any(query, search)
       .then((data)=>{

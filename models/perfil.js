@@ -33,8 +33,7 @@ class Perfil{
       precio: req.body.precio
     };
     conn.none('INSERT INTO "PERFIL"\n' +
-      '("NOMBRE","DESCRIPCION")\n' +
-      'VALUES (${nombre},${descripcion})',
+      'VALUES (DEFAULT, ${nombre},${descripcion})',
       producto)
       .then(() => {
         res.send({msg: 'insertado con exito'});

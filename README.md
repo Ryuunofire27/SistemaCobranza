@@ -98,7 +98,8 @@
 ### Util
 	
 	GET
-		/search?search=...	(params separados por "-")
-	
+		/search?search=...&limit=...&page=...
+		(search: params separados por "-", limit: cantidad por pagina, por defecto 10, page: numero de pagina, por defecto 1)
+
 	POST
 		/login/			(body: 	dni,pssw)

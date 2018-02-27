@@ -33,7 +33,7 @@ class Area{
   insert(req,res,next){
     const nombre= req.body.nombre;
 
-    conn.none('INSERT INTO "AREA"("NOMBRE") VALUES ( $1 )',nombre)
+    conn.none('INSERT INTO "AREA" VALUES (DEFAULT, $1 )',nombre)
       .then(() => {
         res.send({msg: 'insertado con exito'});
       })

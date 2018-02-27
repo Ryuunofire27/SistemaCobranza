@@ -33,8 +33,7 @@ class Producto{
       precio: req.body.precio
     };
     conn.none('INSERT INTO "PRODUCTO"\n' +
-      '("NOMBRE","PRECIO")\n' +
-      'VALUES (${nombre},${precio})',
+      'VALUES (DEFAULT, ${nombre},${precio})',
       producto)
       .then(() => {
         res.send({msg: 'insertado con exito'});
